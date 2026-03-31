@@ -1,12 +1,7 @@
 let port;
 
 // Web control
-let broccoliBtn;
-let candyBtn;
-let rotateLeftBtn;
-let rotateRightBtn;
 let startBtn;
-let portButton;
 
 let score = 0;
 let gameStarted = false;
@@ -18,6 +13,7 @@ let gameDuration = 30; // seconds
 let startTime = 0;
 let timeLeft = 30;
 
+// Arduino input
 let leftButton = 1;
 let rightButton = 1;
 let potValue = 0;
@@ -52,6 +48,13 @@ let ghostImg;
 let feedback = "";
 let feedbackTimer = 0;
 
+// Decorative stars
+let stars = [];
+
+// Music
+let bgMusic;
+let musicStarted = false;
+
 function preload() {
   broccoliImg = loadImage("broccoli.png");
   candyImg = loadImage("candy.png");
@@ -64,49 +67,31 @@ function setup() {
   angleMode(DEGREES);
   textAlign(CENTER, CENTER);
 
+  // Keep serial support, but no visible button
   port = createSerial();
 
-  portButton = createButton("choose port");
-  portButton.position(16, 16);
-  portButton.size(80, 24);
-  portButton.mousePressed(openPort);
-
-  startBtn = createButton("Start / Restart");
-  startBtn.position(16, 60);
-  startBtn.size(95, 24);
+  startBtn = createButton("Start");
+  startBtn.addClass("game-btn");
+  startBtn.position(width / 2 - 70, height - 68);
+  startBtn.size(140, 42);
   startBtn.mousePressed(startGame);
 
-  broccoliBtn = createButton("Broccoli");
-  broccoliBtn.position(16, 96);
-  broccoliBtn.size(72, 24);
-  broccoliBtn.mousePressed(() => {
-    useSerialRotation = false;
-    feedGhost("broccoli");
-  });
+  // Background music
+  bgMusic = new Audio("soundgallerybydmitrytaras-halloween-116010.mp3");
+  bgMusic.loop = true;
+  bgMusic.volume = 0.35;
+  bgMusic.preload = "auto";
 
-  candyBtn = createButton("Candy");
-  candyBtn.position(16, 132);
-  candyBtn.size(72, 24);
-  candyBtn.mousePressed(() => {
-    useSerialRotation = false;
-    feedGhost("candy");
-  });
-
-  rotateLeftBtn = createButton("Rotate L");
-  rotateLeftBtn.position(16, 168);
-  rotateLeftBtn.size(72, 24);
-  rotateLeftBtn.mousePressed(() => {
-    useSerialRotation = false;
-    if (!gameOver) targetRotation -= 25;
-  });
-
-  rotateRightBtn = createButton("Rotate R");
-  rotateRightBtn.position(16, 204);
-  rotateRightBtn.size(72, 24);
-  rotateRightBtn.mousePressed(() => {
-    useSerialRotation = false;
-    if (!gameOver) targetRotation += 25;
-  });
+  // Stars
+  for (let i = 0; i < 40; i++) {
+    stars.push({
+      x: random(width),
+      y: random(height),
+      size: random(1.5, 4),
+      speed: random(0.2, 0.8),
+      phase: random(360)
+    });
+  }
 }
 
 function startGame() {
@@ -119,8 +104,19 @@ function startGame() {
 
   ghostSize = defaultSize;
   targetSize = defaultSize;
-  feedback = "Game started!";
-  feedbackTimer = 45;
+  ghostRotation = 0;
+  targetRotation = 0;
+
+  feedback = "Feed the ghost candy!";
+  feedbackTimer = 60;
+
+  // Start music on first user interaction
+  if (!musicStarted) {
+    bgMusic.play().catch(() => {
+      console.log("Autoplay was blocked until user interaction.");
+    });
+    musicStarted = true;
+  }
 }
 
 function feedGhost(food) {
@@ -134,11 +130,11 @@ function feedGhost(food) {
 
   if (food === "broccoli") {
     score--;
-    targetSize = 150;
+    targetSize = 145;
     feedback = "Eww! Broccoli!";
   } else if (food === "candy") {
     score++;
-    targetSize = 250;
+    targetSize = 265;
     feedback = "Yum! Candy!";
   }
 
@@ -147,7 +143,7 @@ function feedGhost(food) {
 }
 
 function draw() {
-  background(15, 15, 45);
+  drawBackground();
 
   readSerialSafe();
   updateButtonsWithDebounce();
@@ -158,13 +154,13 @@ function draw() {
     if (score >= 5) {
       gameOver = true;
       gameResult = "YOU WIN!";
-      feedback = "The ghost is so happy!";
-      feedbackTimer = 80;
-    } else if (score <= -3) {
+      feedback = "The ghost is full of candy!";
+      feedbackTimer = 90;
+    } else if (score <= -5) {
       gameOver = true;
-      gameResult = "GAME OVER";
-      feedback = "Too much broccoli!";
-      feedbackTimer = 80;
+      gameResult = "YOU LOSE!";
+      feedback = "Too much broccoli...";
+      feedbackTimer = 90;
     } else if (timeLeft === 0) {
       gameOver = true;
       if (score >= 5) {
@@ -172,9 +168,9 @@ function draw() {
         feedback = "Perfect timing!";
       } else {
         gameResult = "TIME'S UP";
-        feedback = "Try feeding more candy!";
+        feedback = "Not enough candy!";
       }
-      feedbackTimer = 80;
+      feedbackTimer = 90;
     }
   }
 
@@ -189,20 +185,36 @@ function draw() {
   // slowly return to normal size
   targetSize = lerp(targetSize, defaultSize, 0.05);
 
-  // Arduino button input
+  // Arduino input still works if port has been opened elsewhere
   if (!gameOver && buttonPressedLeft()) {
-    gameStarted = true;
-    if (startTime === 0) startTime = millis();
+    if (!gameStarted) startGame();
     feedGhost("broccoli");
   }
 
   if (!gameOver && buttonPressedRight()) {
-    gameStarted = true;
-    if (startTime === 0) startTime = millis();
+    if (!gameStarted) startGame();
     feedGhost("candy");
   }
 
   drawScene();
+}
+
+function drawBackground() {
+  background(10, 10, 45);
+
+  noStroke();
+  fill(30, 30, 90, 70);
+  ellipse(width * 0.2, height * 0.2, 260, 260);
+  fill(80, 40, 120, 45);
+  ellipse(width * 0.82, height * 0.25, 300, 300);
+  fill(40, 80, 130, 35);
+  ellipse(width * 0.5, height * 0.82, 420, 220);
+
+  for (let s of stars) {
+    let alpha = 120 + sin(frameCount * s.speed + s.phase) * 80;
+    fill(255, 255, 255, alpha);
+    circle(s.x, s.y, s.size);
+  }
 }
 
 function readSerialSafe() {
@@ -266,51 +278,60 @@ function buttonPressedRight() {
 
 function drawScene() {
   fill(255);
-  textSize(34);
-  text("Feed The Ghost", width / 2, 50);
+  textSize(38);
+  text("Feed The Ghost", width / 2, 58);
 
-  fill(230);
+  fill(220);
   textSize(16);
-  text("Candy makes the ghost happy. Broccoli makes it sad.", width / 2, 82);
+  text("Candy makes it grow. Broccoli makes it shrink.", width / 2, 92);
 
   fill(210);
   textSize(14);
-  text("A = Broccoli    D = Candy    ← → = Rotate", width / 2, 104);
+  text("Keyboard: A = Broccoli   D = Candy   ← → = Rotate", width / 2, 116);
 
   fill(255);
+  textSize(20);
+  text("Score: " + score, width / 2 - 90, 150);
+  text("Time: " + timeLeft, width / 2 + 90, 150);
+
+  fill(255, 240, 180);
+  textSize(16);
+  text("Goal: Reach +5 before you fall to -5", width / 2, 180);
+
+  image(broccoliImg, width * 0.22, height * 0.63, 165, 165);
+  image(candyImg, width * 0.78, height * 0.63, 165, 165);
+
+  fill(230);
   textSize(18);
-  text("Score: " + score, width / 2, 132);
-
-  if (gameStarted) {
-    fill(255);
-    textSize(18);
-    text("Time: " + timeLeft, width / 2, 158);
-  } else {
-    fill(255);
-    textSize(18);
-    text("Goal: Reach 5 points in 30 seconds", width / 2, 158);
-  }
-
-  image(broccoliImg, width * 0.2, height * 0.60, 170, 170);
-  image(candyImg, width * 0.8, height * 0.60, 170, 170);
+  text("-1", width * 0.22, height * 0.78);
+  text("+1", width * 0.78, height * 0.78);
 
   push();
   translate(width / 2, height * 0.60);
 
-  // ghost mood through floating motion
-  let floatSpeed = 2;
+  let floatSpeed = 2.3;
   let floatAmount = 6;
 
   if (score >= 3) {
-    floatSpeed = 4;
-    floatAmount = 12;
-  } else if (score <= -2) {
-    floatSpeed = 1.2;
+    floatSpeed = 4.5;
+    floatAmount = 13;
+  } else if (score <= -3) {
+    floatSpeed = 1.1;
     floatAmount = 3;
   }
 
   let floatY = sin(frameCount * floatSpeed) * floatAmount;
   translate(0, floatY);
+
+  noStroke();
+  if (score > 0) {
+    fill(255, 210, 120, 45);
+  } else if (score < 0) {
+    fill(160, 220, 160, 35);
+  } else {
+    fill(255, 255, 255, 25);
+  }
+  ellipse(0, 0, ghostSize + 55, ghostSize + 55);
 
   rotate(ghostRotation);
   image(ghostImg, 0, 0, ghostSize, ghostSize);
@@ -319,45 +340,75 @@ function drawScene() {
   if (feedbackTimer > 0) {
     fill(255, 230, 120);
     textSize(28);
-    text(feedback, width / 2, height - 48);
+    text(feedback, width / 2, height - 108);
     feedbackTimer--;
   }
 
-  if (gameOver) {
-    fill(255);
-    textSize(36);
-
-    if (gameResult === "YOU WIN!") {
-      fill(140, 255, 180);
-    } else {
-      fill(255, 160, 160);
-    }
-
-    text(gameResult, width / 2, height * 0.28);
-
-    fill(255);
-    textSize(18);
-
-    if (gameResult === "YOU WIN!") {
-      text("The ghost got enough candy!", width / 2, height * 0.28 + 34);
-    } else if (gameResult === "GAME OVER") {
-      text("Too much broccoli for the ghost.", width / 2, height * 0.28 + 34);
-    } else if (gameResult === "TIME'S UP") {
-      text("Try again and feed more candy.", width / 2, height * 0.28 + 34);
-    }
+  if (!gameStarted) {
+    drawStartOverlay();
   }
 
-  fill(180);
-  textSize(12);
-  text(
-    `left raw: ${leftButton}   right raw: ${rightButton}   left stable: ${stableLeft}   right stable: ${stableRight}   pot: ${potValue}`,
-    width / 2,
-    height - 16
-  );
+  if (gameOver) {
+    drawResultOverlay();
+  }
 }
 
-function openPort() {
-  port.open(9600);
+function drawStartOverlay() {
+  push();
+  noStroke();
+  fill(8, 8, 30, 170);
+  rect(0, 0, width, height);
+
+  fill(255);
+  textSize(32);
+  text("Ready to feed the ghost?", width / 2, height * 0.33);
+
+  fill(230);
+  textSize(18);
+  text("Candy = +1 and bigger", width / 2, height * 0.41);
+  text("Broccoli = -1 and smaller", width / 2, height * 0.46);
+
+  fill(255, 240, 180);
+  textSize(20);
+  text("Reach +5 to win. Drop to -5 and you lose.", width / 2, height * 0.54);
+
+  fill(220);
+  textSize(16);
+  text("Press Start to begin", width / 2, height * 0.62);
+  pop();
+}
+
+function drawResultOverlay() {
+  push();
+  noStroke();
+  fill(8, 8, 30, 165);
+  rect(0, 0, width, height);
+
+  if (gameResult === "YOU WIN!") {
+    fill(140, 255, 180);
+  } else {
+    fill(255, 170, 170);
+  }
+
+  textSize(44);
+  text(gameResult, width / 2, height * 0.34);
+
+  fill(255);
+  textSize(20);
+
+  if (gameResult === "YOU WIN!") {
+    text("The ghost got enough candy!", width / 2, height * 0.43);
+  } else if (gameResult === "YOU LOSE!") {
+    text("Too much broccoli for one ghost.", width / 2, height * 0.43);
+  } else if (gameResult === "TIME'S UP") {
+    text("Time ran out before reaching +5.", width / 2, height * 0.43);
+  }
+
+  fill(230);
+  textSize(18);
+  text("Final Score: " + score, width / 2, height * 0.50);
+  text("Press Start to play again", width / 2, height * 0.58);
+  pop();
 }
 
 function keyPressed() {
@@ -380,4 +431,13 @@ function keyPressed() {
     useSerialRotation = false;
     if (!gameOver) targetRotation += 25;
   }
+
+  // optional hidden serial connect
+  if (key === "p" || key === "P") {
+    openPort();
+  }
+}
+
+function openPort() {
+  port.open(9600);
 }
